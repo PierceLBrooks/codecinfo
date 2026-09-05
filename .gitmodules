@@ -1,0 +1,6 @@
+[submodule "jbitstream"]
+	path = jbitstream
+	url = https://github.com/PierceLBrooks/jbitstream.git
+[submodule "bitmap2video"]
+	path = bitmap2video
+	url = https://github.com/PierceLBrooks/bitmap2video.git

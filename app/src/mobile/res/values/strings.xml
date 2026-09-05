@@ -33,6 +33,7 @@
 
     <string name="more_info">Tap here to see more info…</string>
 
+    <string name="content_fragment_tag" translatable="false">content_details</string>
     <string name="details_fragment_tag" translatable="false">item_details</string>
 
     <string name="codec_row_content_description">%1$s codec %2$d - %3$s: %4$s for %5$s</string>

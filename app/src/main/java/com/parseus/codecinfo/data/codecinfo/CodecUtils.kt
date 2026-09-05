@@ -133,11 +133,31 @@ val videoCodecList: MutableList<CodecSimpleInfo> = mutableListOf()
 
 val detailedCodecInfos: MutableMap<String, List<DetailsProperty>> = mutableMapOf()
 
-fun getSimpleCodecInfoList(context: Context, isAudio: Boolean): MutableList<CodecSimpleInfo> {
+fun getSimpleCodecInfoList(context: Context, isAudio: Boolean, codecId: String = "", codecName: String = ""): MutableList<CodecSimpleInfo> {
+    val combinedCodecName = "$codecId/$codecName"
+    var codecSimpleInfoList = ArrayList<CodecSimpleInfo>()
     if (isAudio && audioCodecList.isNotEmpty()) {
-        return audioCodecList
+        if (codecId.isNotEmpty() && codecName.isNotEmpty()) {
+            audioCodecList.forEach {
+                if (it.codecId == codecId && it.codecName == codecName) {
+                    codecSimpleInfoList.add(it)
+                }
+            }
+        } else {
+            codecSimpleInfoList.addAll(audioCodecList)
+        }
+        return codecSimpleInfoList
     } else if (!isAudio && videoCodecList.isNotEmpty()) {
-        return videoCodecList
+        if (codecId.isNotEmpty() && codecName.isNotEmpty()) {
+            videoCodecList.forEach {
+                if (it.codecId == codecId && it.codecName == codecName) {
+                    codecSimpleInfoList.add(it)
+                }
+            }
+        } else {
+            codecSimpleInfoList.addAll(videoCodecList)
+        }
+        return codecSimpleInfoList
     }
 
     val prefs = PreferenceManager.getDefaultSharedPreferences(context)
@@ -177,7 +197,6 @@ fun getSimpleCodecInfoList(context: Context, isAudio: Boolean): MutableList<Code
 
     val showAliases = prefs.getBoolean("show_aliases", false)
     val filteringOption = prefs.getString("filter_type", "2")!!.toInt()
-    var codecSimpleInfoList = ArrayList<CodecSimpleInfo>()
 
     for ((codecIndex, mediaCodecInfo) in mediaCodecInfos.withIndex()) {
         if ((filteringOption == 0 && mediaCodecInfo.isEncoder) || (filteringOption == 1 && !mediaCodecInfo.isEncoder)) {
@@ -209,6 +228,11 @@ fun getSimpleCodecInfoList(context: Context, isAudio: Boolean): MutableList<Code
             if (isAudio == isAudioCodec) {
                 val codecSimpleInfo = CodecSimpleInfo((codecIndex * 100 + index).toLong(), codecId, mediaCodecInfo.name,
                         isAudioCodec, mediaCodecInfo.isEncoder, isHardwareAccelerated(mediaCodecInfo))
+                val pref = prefs.getString(combinedCodecName, "")!!
+                if (pref.isNotEmpty()) {
+                    codecSimpleInfo.isTested = true
+                    codecSimpleInfo.isProblematic = pref.toBoolean()
+                }
                 if (codecSimpleInfoList.find {
                     it.codecId == codecSimpleInfo.codecId
                             && it.codecName == codecSimpleInfo.codecName
@@ -239,6 +263,32 @@ fun getSimpleCodecInfoList(context: Context, isAudio: Boolean): MutableList<Code
         videoCodecList.addAll(codecSimpleInfoList)
     }
 
+    codecSimpleInfoList.clear()
+
+    if (isAudio && audioCodecList.isNotEmpty()) {
+        if (codecId.isNotEmpty() && codecName.isNotEmpty()) {
+            audioCodecList.forEach {
+                if (it.codecId == codecId && it.codecName == codecName) {
+                    codecSimpleInfoList.add(it)
+                }
+            }
+        } else {
+            codecSimpleInfoList.addAll(audioCodecList)
+        }
+        return codecSimpleInfoList
+    } else if (!isAudio && videoCodecList.isNotEmpty()) {
+        if (codecId.isNotEmpty() && codecName.isNotEmpty()) {
+            videoCodecList.forEach {
+                if (it.codecId == codecId && it.codecName == codecName) {
+                    codecSimpleInfoList.add(it)
+                }
+            }
+        } else {
+            codecSimpleInfoList.addAll(videoCodecList)
+        }
+        return codecSimpleInfoList
+    }
+
     return codecSimpleInfoList
 }
 
@@ -248,9 +298,44 @@ fun isDetailedCodecInfoCached(codecId: String, codecName: String): Boolean {
 }
 
 fun getDetailedCodecInfo(context: Context, codecId: String, codecName: String): List<DetailsProperty> {
+    val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     val combinedCodecName = "$codecId/$codecName"
+    var simpleCodecInfo: CodecSimpleInfo? = null
+    var isTested = false
+    var isProblematic = false
+    if (audioCodecList.isEmpty() || videoCodecList.isEmpty()) {
+        val codecSimpleInfoList = getSimpleCodecInfoList(context, true)
+        codecSimpleInfoList.addAll(getSimpleCodecInfoList(context, false))
+    }
+    if (audioCodecList.isNotEmpty() || videoCodecList.isNotEmpty()) {
+        simpleCodecInfo = audioCodecList.find {
+            it.codecId == codecId && it.codecName == codecName
+        }
+        if (simpleCodecInfo == null) {
+            simpleCodecInfo = videoCodecList.find {
+                it.codecId == codecId && it.codecName == codecName
+            }
+        }
+    }
+    if (simpleCodecInfo != null) {
+        isTested = simpleCodecInfo.isTested
+        isProblematic = simpleCodecInfo.isProblematic
+    }
+    if (!isTested) {
+        val pref = prefs.getString(combinedCodecName, "")!!
+        if (pref.isNotEmpty()) {
+            isTested = true
+            isProblematic = pref.toBoolean()
+        }
+    }
     if (detailedCodecInfos[combinedCodecName] != null) {
-        return detailedCodecInfos[combinedCodecName]!!.also {
+        val detailedCodecInfo = arrayListOf<DetailsProperty>()
+        detailedCodecInfo.addAll(detailedCodecInfos[combinedCodecName]!!)
+        if (isTested) {
+            detailedCodecInfo.add(DetailsProperty(detailedCodecInfo.size.toLong(), context.getString(R.string.problematic),
+                isProblematic.toString()))
+        }
+        return detailedCodecInfo.also {
             saveToLogcat(context, codecId, codecName, it)
         }
     }
@@ -392,7 +477,12 @@ fun getDetailedCodecInfo(context: Context, codecId: String, codecName: String): 
         propertyList.add(DetailsProperty(propertyList.size.toLong(), profileString, it))
     }
 
-    detailedCodecInfos[combinedCodecName] = propertyList
+    detailedCodecInfos[combinedCodecName] = propertyList.clone() as List<DetailsProperty>
+
+    if (isTested) {
+        propertyList.add(DetailsProperty(propertyList.size.toLong(), context.getString(R.string.problematic),
+            isProblematic.toString()))
+    }
 
     return propertyList.also {
         saveToLogcat(context, codecId, codecName, it)
@@ -1182,7 +1272,7 @@ private fun needsHevc10BitProfileExcluded(codecId: String, profile: Int): Boolea
 
 private fun needsMaxResolutionFixForMPEG4(codecId: String) = "video/mp4v-es" == codecId && Build.MODEL in incorrectMpeg4ResolutionModelList
 
-private fun saveToLogcat(context: Context, codecId: String, codecName: String, detailsList: List<DetailsProperty>) {
+fun saveToLogcat(context: Context, codecId: String, codecName: String, detailsList: List<DetailsProperty>) {
     val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     val saveDetailsToLogcat = prefs.getBoolean("save_details_to_logcat", false)
     if (saveDetailsToLogcat) {

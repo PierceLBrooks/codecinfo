@@ -110,6 +110,10 @@ val nonFreeMobileImplementation: Configuration by configurations.creating
 val standardMobileImplementation: Configuration by configurations.creating
 
 dependencies {
+    implementation(project(":bitmap2video"))
+    implementation(project(":bitstream"))
+    implementation("org.jcodec:jcodec:0.2.5")
+
     implementation(libs.coroutines)
 
     implementation(libs.androidx.activity)

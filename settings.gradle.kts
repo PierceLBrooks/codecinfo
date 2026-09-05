@@ -14,13 +14,17 @@ pluginManagement {
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version("1.0.0")
 }
-dependencyResolutionManagement {
+/*dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
         maven ( url = "https://jitpack.io" )
     }
-}
+}*/
 rootProject.name = "CodecInfo"
 include(":app")
+include(":bitmap2video")
+include(":bitstream")
+project(":bitmap2video").projectDir = File("bitmap2video/library")
+project(":bitstream").projectDir = File("jbitstream")

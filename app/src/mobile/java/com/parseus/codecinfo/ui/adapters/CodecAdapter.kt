@@ -108,6 +108,7 @@ class CodecAdapter : RecyclerView.Adapter<CodecAdapter.CodecInfoViewHolder>() {
         private val codecType = binding.codecType
         private val moreInfo = binding.moreInfo
         private val hwIcon = binding.hwIcon
+        private val problemWarnIcon = binding.problemWarnIcon
 
         fun bindCodecInfo(codecInfo: CodecSimpleInfo, position: Int) {
             codecId.text = codecInfo.codecId
@@ -121,7 +122,9 @@ class CodecAdapter : RecyclerView.Adapter<CodecAdapter.CodecInfoViewHolder>() {
                 moreInfo.visibility = View.GONE
             }
 
-            hwIcon.isVisible = codecInfo.isHardwareAccelereated
+            problemWarnIcon.isVisible = codecInfo.isProblematic
+
+            hwIcon.isVisible = codecInfo.isHardwareAccelerated
                     && PreferenceManager.getDefaultSharedPreferences(layout.context).getBoolean("show_hw_icon", true)
 
             if (KNOWN_PROBLEMS_DB.isNotEmpty()) {

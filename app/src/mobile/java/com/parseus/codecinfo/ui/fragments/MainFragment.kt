@@ -10,6 +10,9 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.parseus.codecinfo.R
 import com.parseus.codecinfo.data.InfoType
+import com.parseus.codecinfo.data.codecinfo.getDetailedCodecInfo
+import com.parseus.codecinfo.data.codecinfo.getSimpleCodecInfoList
+import com.parseus.codecinfo.data.drm.getDetailedDrmInfo
 import com.parseus.codecinfo.databinding.FragmentMainBinding
 import com.parseus.codecinfo.ui.MainActivity
 import com.parseus.codecinfo.ui.adapters.PagerAdapter
@@ -20,6 +23,7 @@ class MainFragment : Fragment() {
 
     private var _binding: FragmentMainBinding? = null
     private val binding get() = _binding!!
+    private var currentFragment: Fragment? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentMainBinding.inflate(inflater)
@@ -70,11 +74,30 @@ class MainFragment : Fragment() {
                 true
             }
         }
+
+        if (InfoType.currentInfoType == InfoType.Audio || InfoType.currentInfoType == InfoType.Video) {
+            val codecSimpleInfoList = getSimpleCodecInfoList(requireContext(), InfoType.currentInfoType == InfoType.Audio)
+            for (info in codecSimpleInfoList) {
+                getDetailedCodecInfo(requireContext(), info.codecId, info.codecName)
+            }
+        }
+    }
+
+    fun removeFragmentFromViewHierarchy(): Boolean {
+        if (currentFragment != null) {
+            parentFragmentManager.beginTransaction()
+                .remove(currentFragment!!)
+                .commit()
+            currentFragment = null
+            return true
+        }
+        return false
     }
 
     private fun addFragmentToViewHierarchy() {
+        currentFragment = createInfoFragment()
         parentFragmentManager.beginTransaction()
-            .replace(R.id.itemFragment, createInfoFragment())
+            .replace(R.id.itemFragment, currentFragment!!)
             .commit()
     }
 

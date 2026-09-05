@@ -35,7 +35,7 @@
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/content_fragment"
         android:name="com.parseus.codecinfo.ui.fragments.MainFragment"
-        android:tag="content_fragment"
+        android:tag="@string/content_fragment_tag"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintTop_toBottomOf="@id/appBar"

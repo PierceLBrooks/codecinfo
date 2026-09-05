@@ -20,6 +20,13 @@
         android:contentDescription="@string/action_share"
         android:icon="@drawable/ic_share" />
 
+    <item android:id="@+id/menu_item_test"
+        android:visible="false"
+        app:showAsAction="always"
+        android:title="@string/action_test"
+        android:contentDescription="@string/action_test"
+        android:icon="@drawable/ic_hardware"/>
+
     <item android:id="@+id/menu_item_settings"
         app:showAsAction="ifRoom"
         android:title="@string/action_settings"

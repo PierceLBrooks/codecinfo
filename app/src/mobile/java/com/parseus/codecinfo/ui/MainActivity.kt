@@ -1,5 +1,6 @@
 package com.parseus.codecinfo.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.SearchManager
 import android.content.ClipData
@@ -8,12 +9,14 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.VectorDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
 import android.view.Window
+import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.ActionBar
@@ -21,6 +24,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.SearchView
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -45,6 +49,7 @@ import com.parseus.codecinfo.R
 import com.parseus.codecinfo.data.InfoType
 import com.parseus.codecinfo.data.codecinfo.audioCodecList
 import com.parseus.codecinfo.data.codecinfo.detailedCodecInfos
+import com.parseus.codecinfo.data.codecinfo.getSimpleCodecInfoList
 import com.parseus.codecinfo.data.codecinfo.videoCodecList
 import com.parseus.codecinfo.data.drm.detailedDrmInfo
 import com.parseus.codecinfo.data.drm.drmList
@@ -56,6 +61,7 @@ import com.parseus.codecinfo.databinding.ActivityMainBinding
 import com.parseus.codecinfo.databinding.DeviceIssuesLayoutBinding
 import com.parseus.codecinfo.ui.adapters.DeviceIssuesAdapter
 import com.parseus.codecinfo.ui.fragments.DetailsFragment
+import com.parseus.codecinfo.ui.fragments.MainFragment
 import com.parseus.codecinfo.ui.settings.DarkTheme
 import com.parseus.codecinfo.ui.settings.SettingsContract
 import com.parseus.codecinfo.utils.checkForUpdate
@@ -82,9 +88,12 @@ import com.parseus.codecinfo.utils.updateToolBarColor
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import dev.kdrag0n.monet.theme.ColorScheme
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import okio.buffer
 import okio.source
+import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
@@ -153,12 +162,32 @@ class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
                 // Workaround for a memory leak from https://issuetracker.google.com/issues/139738913
                 finishAfterTransition()
             } else {
+                var contentFragment: MainFragment? = null
+
                 if (!isInTwoPaneMode()) {
                     supportActionBar!!.setDisplayHomeAsUpEnabled(false)
+                } else {
+                    contentFragment = supportFragmentManager.findFragmentByTag(getString(R.string.content_fragment_tag)) as MainFragment?
+                    if (contentFragment != null) {
+                        if (!contentFragment.removeFragmentFromViewHierarchy()) {
+                            contentFragment = null
+                        }
+                    }
                 }
-                isEnabled = false
-                onBackPressedDispatcher.onBackPressed()
-                isEnabled = true
+                if (contentFragment == null) {
+                    val detailsFragment = supportFragmentManager.findFragmentByTag(getString(R.string.details_fragment_tag))
+                    if (detailsFragment != null) {
+                        if (!isInTwoPaneMode()) {
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                            isEnabled = true
+                        } else {
+                            supportFragmentManager.beginTransaction().remove(detailsFragment).commit()
+                        }
+                    } else {
+                        finishAfterTransition()
+                    }
+                }
             }
         }
     }
@@ -389,6 +418,53 @@ class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
             }
 
             R.id.menu_item_settings -> settingsContract.launch(null)
+
+            R.id.menu_item_test -> {
+                val prefs = PreferenceManager.getDefaultSharedPreferences(this).edit()
+                var codecSimpleInfoList = getSimpleCodecInfoList(this, true)
+                codecSimpleInfoList.addAll(getSimpleCodecInfoList(this, false))
+                for (info in codecSimpleInfoList) {
+                    val combinedCodecName = "$info.codecId/$info.codecName"
+                    prefs.putString(combinedCodecName, "")
+                }
+                prefs.apply()
+
+                if (BuildConfig.DEBUG) {
+                    Toast.makeText(this, getString(R.string.action_test), Toast.LENGTH_LONG).show()
+                }
+
+                val detailsFragment = supportFragmentManager.findFragmentByTag(
+                    getString(R.string.details_fragment_tag)) as? DetailsFragment
+                if (detailsFragment != null && (InfoType.currentInfoType == InfoType.Audio || InfoType.currentInfoType == InfoType.Video)) {
+                    codecSimpleInfoList = getSimpleCodecInfoList(this, InfoType.currentInfoType == InfoType.Audio, detailsFragment.codecId!!, detailsFragment.codecName!!)
+                    run {
+                        codecSimpleInfoList.first().testWhetherProblematic(this)
+                    }
+                    if (!isInTwoPaneMode()) {
+                        onBackPressedDispatcher.onBackPressed()
+                    } else {
+                        supportFragmentManager.beginTransaction().remove(detailsFragment).commit()
+                    }
+                } else {
+                    var isTesting = false
+                    for (info in codecSimpleInfoList) {
+                        if (info.testWhetherProblematic(this)) {
+                            isTesting = true
+                        }
+                    }
+                    if (!isTesting) {
+                        for (info in codecSimpleInfoList) {
+                            if (info.isProblematic) {
+                                info.saveToLogcat(this)
+                            }
+                        }
+                    }
+                }
+
+                if (BuildConfig.DEBUG) {
+                    Toast.makeText(this, getString(R.string.action_test), Toast.LENGTH_LONG).show()
+                }
+            }
         }
 
         return super.onOptionsItemSelected(item)
@@ -396,6 +472,7 @@ class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.clear()
+        //return super.onCreateOptionsMenu(menu)
         menuInflater.inflate(R.menu.app_bar_menu, menu)
 
         if (binding.toolbar.background is ColorDrawable) {
@@ -419,6 +496,22 @@ class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
         if (knownProblems.isNotEmpty()) {
             menu.findItem(R.id.menu_item_warning).isVisible = true
         }
+
+        try {
+            var codecs = 0
+            val manifests = JSONObject(assets.open("codecs/codecs.py.json").bufferedReader().readText())
+            for (key in manifests.keys()) {
+                val manifest = manifests.getJSONArray(key)
+                for (i in 0 until manifest.length()) {
+                    if (manifest.getString(i).isNotEmpty()) {
+                        codecs += 1
+                    }
+                }
+            }
+            if (codecs > 0) {
+                menu.findItem(R.id.menu_item_test).isVisible = true
+            }
+        } catch (_: Exception) {}
 
         return super.onCreateOptionsMenu(menu)
     }
@@ -504,7 +597,7 @@ class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
                 val canvas = Canvas(bitmap)
                 drawable.run {
                     setBounds(0, 0, canvas.width, canvas.height)
-                    setTint(getAttributeColor(androidx.appcompat.R.attr.colorPrimary))
+                    setTint(ContextCompat.getColor(this@MainActivity, android.R.color.darker_gray))
                     draw(canvas)
                 }
 
