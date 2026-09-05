@@ -9,10 +9,12 @@ import android.os.Environment
 import android.util.Log
 import android.view.Surface
 import androidx.preference.PreferenceManager
+import com.homesoft.encoder.FrameMuxer
 import com.homesoft.encoder.Mp4FrameMuxer
 import com.homesoft.encoder.Muxer
 import com.homesoft.encoder.MuxerConfig
 import com.homesoft.encoder.MuxingCompletionListener
+import com.homesoft.encoder.WebmFrameMuxer
 import com.parseus.codecinfo.BuildConfig
 import com.parseus.codecinfo.R
 import com.parseus.codecinfo.data.DetailsProperty
@@ -376,11 +378,17 @@ data class CodecSimpleInfo(val id: Long,
         resolveWhetherProblematic()
     }
 
-    private suspend fun muxVideo(context: Context) {
+    private suspend fun muxVideo(context: Context, codec: String) {
         val path = getTestPath(context)
         val bitmap = BitmapFactory.decodeResource(context.resources, R.raw.im1)
         val file = File(path + "/test_" + codecId.replace("/", "_") + "_" + codecName.replace("/", "_") + ".mp4")
         val fps = 1.0f
+        var mux: FrameMuxer? = null
+        if (codec == "h264" || codec == "hevc") {
+            mux = Mp4FrameMuxer(file.absolutePath, fps)
+        } else {
+            mux = WebmFrameMuxer(file.absolutePath, fps)
+        }
         val config = MuxerConfig(
             file,
             0,
@@ -389,7 +397,7 @@ data class CodecSimpleInfo(val id: Long,
             3,
             fps,
             1500000,
-            Mp4FrameMuxer(file.absolutePath, fps),
+            mux,
             10
         )
         val muxer = Muxer(context, config)
@@ -438,7 +446,7 @@ data class CodecSimpleInfo(val id: Long,
             if (isEncoder) {
                 runBlocking {
                     launch {
-                        muxVideo(context)
+                        muxVideo(context, codec!!)
                     }
                 }
             } else {
