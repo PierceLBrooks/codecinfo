@@ -345,7 +345,7 @@ data class CodecSimpleInfo(val id: Long,
                             if (extraDataNow != null && (extraDataThen.isEmpty() || extraDataThen.size != extraDataNow.size || !extraDataThen.contentEquals(extraDataNow))) {
                                 extraDataThen = extraDataNow.clone()
                                 if (!decoder!!.rebuildDecoder(extraDataNow, extraDataNow.size)) {
-                                    Log.e("CodecSimpleInfo", "rebuildDecoder @ $combinedCodecName = $i / $j")
+                                    Log.e("CodecSimpleInfo", "rebuildDecoder @ $combinedCodecName = $i / $j / " + manifests.getString(i))
                                     problems += 1
                                     break
                                 }
@@ -353,7 +353,7 @@ data class CodecSimpleInfo(val id: Long,
                         }
                     }
                     if (!decoder!!.addEncodedData(frame.payload, frame.payload.size, extraDataThen, extraDataThen.size, frame.timestamp)) {
-                        Log.e("CodecSimpleInfo", "addEncodedData @ $combinedCodecName = $i / $j")
+                        Log.e("CodecSimpleInfo", "addEncodedData @ $combinedCodecName = $i / $j / " + manifests.getString(i))
                         problems += 1
                         break
                     }

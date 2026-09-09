@@ -1,15 +1,16 @@
 package com.parseus.codecinfo.ui
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.SearchManager
+import android.content.BroadcastReceiver
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.VectorDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Menu
@@ -68,7 +69,6 @@ import com.parseus.codecinfo.utils.checkForUpdate
 import com.parseus.codecinfo.utils.createInAppUpdateResultLauncher
 import com.parseus.codecinfo.utils.disableApiBlacklistOnPie
 import com.parseus.codecinfo.utils.getAllInfoString
-import com.parseus.codecinfo.utils.getAttributeColor
 import com.parseus.codecinfo.utils.getDefaultThemeOption
 import com.parseus.codecinfo.utils.getItemListString
 import com.parseus.codecinfo.utils.getPrimaryColor
@@ -88,8 +88,6 @@ import com.parseus.codecinfo.utils.updateToolBarColor
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import dev.kdrag0n.monet.theme.ColorScheme
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import okio.buffer
 import okio.source
@@ -100,6 +98,8 @@ import java.util.UUID
 class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
 
     private lateinit var binding: ActivityMainBinding
+
+    private var ipc: BroadcastReceiver? = null
 
     private var shouldRecreateActivity = false
 
@@ -310,8 +310,66 @@ class MainActivity : MonetCompatActivity(), SearchView.OnQueryTextListener {
         }
     }
 
+    override fun onPause() {
+        if (ipc != null) {
+            unregisterReceiver(ipc!!)
+        }
+
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+
+        if (ipc == null) {
+            val filter = IntentFilter()
+            filter.addAction("com.parseus.codecinfo.IPC")
+            filter.addCategory(Intent.CATEGORY_DEFAULT)
+            ipc = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val detailsFragment = supportFragmentManager.findFragmentByTag(
+                        getString(R.string.details_fragment_tag)) as? DetailsFragment
+                    val prefs = PreferenceManager.getDefaultSharedPreferences(this@MainActivity).edit()
+                    var codecSimpleInfoList = getSimpleCodecInfoList(this@MainActivity, true)
+                    codecSimpleInfoList.addAll(getSimpleCodecInfoList(this@MainActivity, false))
+                    for (info in codecSimpleInfoList) {
+                        val combinedCodecName = "$info.codecId/$info.codecName"
+                        prefs.putString(combinedCodecName, "")
+                    }
+                    prefs.apply()
+                    if (detailsFragment != null && (InfoType.currentInfoType == InfoType.Audio || InfoType.currentInfoType == InfoType.Video)) {
+                        codecSimpleInfoList = getSimpleCodecInfoList(this@MainActivity, InfoType.currentInfoType == InfoType.Audio, detailsFragment.codecId!!, detailsFragment.codecName!!)
+                        run {
+                            codecSimpleInfoList.first().testWhetherProblematic(this@MainActivity)
+                        }
+                        if (!isInTwoPaneMode()) {
+                            onBackPressedDispatcher.onBackPressed()
+                        } else {
+                            supportFragmentManager.beginTransaction().remove(detailsFragment).commit()
+                        }
+                    } else {
+                        var isTesting = false
+                        for (info in codecSimpleInfoList) {
+                            if (info.testWhetherProblematic(this@MainActivity)) {
+                                isTesting = true
+                            }
+                        }
+                        if (!isTesting) {
+                            for (info in codecSimpleInfoList) {
+                                if (info.isProblematic) {
+                                    info.saveToLogcat(this@MainActivity)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.registerReceiver(this, ipc, filter, ContextCompat.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(ipc, filter)
+            }
+        }
 
         if (shouldRecreateActivity) {
             ActivityCompat.recreate(this)
